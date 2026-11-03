@@ -1,0 +1,18 @@
+# Deploy as a Render Blueprint from a repository with these files at its root.
+services:
+  - type: web
+    name: slashdr-client-review
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn api:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-4.1-mini
+      - key: REVIEW_USERNAME
+        value: client-review
+      - key: REVIEW_PASSWORD
+        sync: false
