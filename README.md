@@ -269,3 +269,11 @@ If the application was already running, stop it with `Ctrl+C`, run `python3 app.
 ## Downloading answers
 
 **Download answer for review** exports the selected patient ID, question, generated answer, source IDs and reported missing information as a text file. Developer evaluation metrics are not included in the application interface or download.
+
+## Loading and layout improvements
+
+Clinic status/count and the first patient-page request now load concurrently. Startup status and clinic options also load concurrently. Clinic counts are cached per configured store and clinic; restart the app after replacing the database. Visible loading messages distinguish record requests from disabled generation. A disabled Generate button is not a loading spinner: production generation remains off while `ALLOW_EXTERNAL_PATIENT_DATA=false`. No automatic generation retries were added.
+
+Browser requests have bounded timeouts and clearer network/error messages. Render logs include `request_completed`, the method, route path, status and server elapsed milliseconds; they do not include patient IDs from query strings, questions, passwords or record contents. `Server-Timing` is available in the browser Network inspector. Compare that server timing with total browser request duration to investigate network vs server latency.
+
+Spacing changes include a wider patient sidebar, shorter patient IDs in the CSV dropdown, separate clinic and pagination button spacing, a compact title area, aligned header/content widths, responsive question shortcuts and a generation-disabled explanation.

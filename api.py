@@ -3,6 +3,8 @@ import base64
 import binascii
 import os
 import secrets
+import time
+import logging
 from functools import lru_cache
 from urllib.parse import urlsplit
 
@@ -63,6 +65,7 @@ class PatientSummary(BaseModel):
 
 @app.middleware('http')
 async def review_controls(request: Request, call_next):
+    started = time.perf_counter()
     scoped_clinics = None
     protected = request.url.path != '/health'
     csv_mode = os.environ.get('DATA_MODE', 'csv') == 'csv'
@@ -105,6 +108,9 @@ async def review_controls(request: Request, call_next):
         response = await call_next(request)
     finally:
         REQUEST_CLINICS.reset(scope_token)
+    elapsed_ms = (time.perf_counter() - started) * 1000
+    response.headers['Server-Timing'] = f'app;dur={elapsed_ms:.1f}'
+    logging.getLogger('uvicorn.error').info('request_completed method=%s path=%s status=%s duration_ms=%.1f', request.method, request.url.path, response.status_code, elapsed_ms)
     response.headers['Cache-Control'] = 'no-store'
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'DENY'

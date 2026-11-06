@@ -71,6 +71,11 @@ class FastAPITests(unittest.TestCase):
         status, body, _ = self.request('/api/patient?id=P010')
         self.assertEqual(json.loads(body)['patient_id'], 'P010')
 
+    def test_request_timing_header(self):
+        status, body, headers = self.request('/api/status')
+        self.assertEqual(status, 200)
+        self.assertTrue(headers[b'server-timing'].startswith(b'app;dur='))
+
     def test_generation_preserves_ui_response(self):
         answer = {'patient_id': 'P010', 'answer': 'Routine review [P010-PROFILE].',
                   'source_ids': ['P010-PROFILE'], 'missing_information': []}

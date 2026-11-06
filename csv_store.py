@@ -76,6 +76,7 @@ class CsvStore:
             return [{'clinic_id': r['clinic_id'], 'name': 'Clinic ' + r['clinic_id']} for r in rows
                     if '*' in self.allowed_clinics or r['clinic_id'] in self.allowed_clinics]
 
+    @lru_cache(maxsize=256)
     def patient_count(self, clinic_id):
         clinic_id = self.clinic(clinic_id)
         with self.connection() as db:

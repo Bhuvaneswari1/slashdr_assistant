@@ -2,11 +2,24 @@
 const $ = id => document.getElementById(id);
 let dataMode = 'synthetic', clinicId = '', pageOffset = 0, searchVersion = 0, searchTimer;
 let patients = [], selected = null, lastResult = null, configured = false, busy = false, selectionVersion = 0;
-async function api(path, options) {
-  const response = await fetch(path, options);
-  const body = await response.json();
-  if (!response.ok) throw new Error(body.error || 'Request failed.');
-  return body;
+async function api(path, options = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), path === '/api/generate' ? 90000 : 45000);
+  try {
+    const response = await fetch(path, {...options, signal: controller.signal});
+    let body;
+    try { body = await response.json(); }
+    catch (error) { if (error.name === 'AbortError') throw error; throw new Error(`The server returned an unreadable response (HTTP ${response.status}). Refresh and check Render logs.`); }
+    if (!response.ok) throw new Error(body.error || `Request failed (HTTP ${response.status}).`);
+    return body;
+  } catch (error) {
+    if (error.name === 'AbortError') throw new Error('The request timed out. The server may still be processing it; check Render logs before retrying generation.');
+    if (error instanceof TypeError) throw new Error('The browser lost its connection to the server. Refresh the page and check Render logs if it repeats.');
+    throw error;
+  } finally { clearTimeout(timer); }
+}
+function generationHelp() {
+  $('generation-help').textContent = !configured ? (dataMode === 'csv' ? 'AI generation is disabled in the server settings. Patient records can still be reviewed.' : 'Add an API key in the server settings to enable AI generation.') : (!selected ? 'Select a patient to enable generation.' : '');
 }
 function message(text, error = false) { $('message').textContent = text; $('message').className = error ? 'error' : ''; }
 function recordElement(record) {
@@ -26,14 +39,14 @@ function filterPatients() {
   const previous = $('patient').value;
   $('patient').replaceChildren();
   for (const p of patients.filter(p => `${p.patient_id} ${p.name}`.toLowerCase().includes(query))) {
-    const option = document.createElement('option'); option.value = p.patient_id; option.textContent = `${p.patient_id} · ${p.name}`; $('patient').append(option);
+    const option = document.createElement('option'); option.value = p.patient_id; option.textContent = dataMode === 'csv' ? p.patient_id : `${p.patient_id} · ${p.name}`; $('patient').append(option);
   }
   if ([...$('patient').options].some(o => o.value === previous)) $('patient').value = previous;
   loadPatient();
 }
 async function loadPatient() {
   const version = ++selectionVersion;
-  selected = null; lastResult = null; $('context-scope').textContent = ''; $('result').hidden = true; $('records').replaceChildren(); $('profile').replaceChildren(); $('count').textContent = ''; message(''); $('generate').disabled = true;
+  selected = null; lastResult = null; $('context-scope').textContent = ''; $('result').hidden = true; $('records').replaceChildren(); $('profile').replaceChildren(); $('count').textContent = ''; message('Loading patient records…'); $('generate').disabled = true; generationHelp();
   if (!$('patient').value) { message('No matching patients. Try another search.'); return; }
   try {
     const patient = await api(`/api/patient?id=${encodeURIComponent($('patient').value)}${dataMode === 'csv' ? `&clinic_id=${encodeURIComponent(clinicId)}` : ''}`);
@@ -46,7 +59,8 @@ async function loadPatient() {
     $('count').textContent = `${patient.records.length} RECORDS`;
     $('records').replaceChildren(...patient.records.map(recordElement));
     $('context-scope').textContent = patient.context_scope?.notes?.join(' ') || '';
-    $('generate').disabled = !configured || busy;
+    $('generate').disabled = !configured || busy; generationHelp();
+    message('Patient records ready.');
   } catch (error) { if (version === selectionVersion) message(error.message, true); }
 }
 document.querySelectorAll('[data-question]').forEach(button => button.addEventListener('click', () => { $('question').value = button.dataset.question; $('question').focus(); }));
@@ -94,12 +108,14 @@ async function searchCsvPatients(reset = false) {
   $('result').hidden = true; $('generate').disabled = true;
   $('profile').replaceChildren(); $('records').replaceChildren(); $('context-scope').textContent = ''; $('count').textContent = '';
   if (!clinicId) return;
+  message('Loading patients for the selected clinic…');
+  $('patients-previous').disabled = true; $('patients-next').disabled = true;
   try {
     const list = await api(`/api/patients?clinic_id=${encodeURIComponent(clinicId)}&search=${encodeURIComponent($('search').value)}&offset=${pageOffset}&limit=50`);
     if (version !== searchVersion) return;
     $('patient').replaceChildren();
     for (const p of list) {
-      const option = document.createElement('option'); option.value = p.patient_id; option.textContent = `${p.patient_id} · ${p.name}`; $('patient').append(option);
+      const option = document.createElement('option'); option.value = p.patient_id; option.textContent = dataMode === 'csv' ? p.patient_id : `${p.patient_id} · ${p.name}`; $('patient').append(option);
     }
     $('patients-previous').disabled = pageOffset === 0;
     $('patients-next').disabled = list.length < 50;
@@ -108,25 +124,35 @@ async function searchCsvPatients(reset = false) {
 }
 $('clinic-id').addEventListener('input', () => {
   clinicId = ''; ++searchVersion; ++selectionVersion; selected = null; lastResult = null;
-  $('result').hidden = true; $('generate').disabled = true; $('patient').replaceChildren();
+  $('result').hidden = true; $('generate').disabled = true; generationHelp(); $('patient').replaceChildren();
   $('profile').replaceChildren(); $('records').replaceChildren(); $('context-scope').textContent = ''; $('count').textContent = '';
 });
 $('clinic-load').addEventListener('click', async () => {
-  clinicId = $('clinic-id').value.trim(); $('search').value = '';
+  const requestedClinic = $('clinic-id').value.trim();
+  if (!/^\d+$/.test(requestedClinic)) { message('Enter a numeric Clinic ID.', true); return; }
+  clinicId = requestedClinic; $('search').value = '';
+  const button = $('clinic-load');
+  button.disabled = true; button.setAttribute('aria-busy', 'true'); button.textContent = 'Loading patients…';
   try {
-    const status = await api(`/api/status?clinic_id=${encodeURIComponent(clinicId)}`);
-    configured = status.generation_enabled;
-    $('status').textContent = `${status.patient_count} patients in clinic ${clinicId}. ${configured ? 'External generation enabled.' : 'Record review enabled. External generation disabled.'}`;
-    await searchCsvPatients(true);
-  } catch (error) { message(error.message, true); }
+    await Promise.all([
+      searchCsvPatients(true),
+      api(`/api/status?clinic_id=${encodeURIComponent(requestedClinic)}`).then(status => {
+        if (clinicId !== requestedClinic) return;
+        configured = status.generation_enabled;
+        $('status').textContent = `${status.patient_count.toLocaleString()} patients in clinic ${requestedClinic}. ${configured ? 'AI generation enabled.' : 'Record review available; AI generation disabled.'}`;
+        $('generate').disabled = !configured || !selected || busy; generationHelp();
+      }),
+    ]);
+  } catch (error) { if (clinicId === requestedClinic) message(error.message, true); }
+  finally { button.disabled = false; button.removeAttribute('aria-busy'); button.textContent = 'Load clinic patients'; }
 });
 $('patients-previous').addEventListener('click', () => {pageOffset = Math.max(0, pageOffset - 50); searchCsvPatients();});
 $('patients-next').addEventListener('click', () => {pageOffset += 50; searchCsvPatients();});
 (async () => {
   try {
-    const status = await api('/api/status');
+    const [status, availableClinics] = await Promise.all([api('/api/status'), api('/api/clinics')]);
     dataMode = status.data_mode || 'synthetic';
-    configured = status.generation_enabled ?? status.configured;
+    configured = status.generation_enabled ?? status.configured; generationHelp();
     if (dataMode === 'csv') {
       $('clinic-controls').hidden = false; $('patient-pages').hidden = false;
       $('search-label').textContent = 'Find by exact patient ID'; $('search').placeholder = 'For example DB-123 or 123';
@@ -134,8 +160,7 @@ $('patients-next').addEventListener('click', () => {pageOffset += 50; searchCsvP
       $('records-help').textContent = 'Open a source to inspect the imported CSV row. See the scope notes for retrieval limits.';
       $('status').textContent = 'Enter an authorized Clinic ID, then load its patients.';
       $('generate').disabled = true;
-      const clinics = await api('/api/clinics');
-      for (const clinic of clinics) {
+      for (const clinic of availableClinics) {
         const option = document.createElement('option'); option.value = clinic.clinic_id; option.textContent = clinic.name; $('clinic-options').append(option);
       }
     } else {
