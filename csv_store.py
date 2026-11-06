@@ -249,7 +249,7 @@ def _cached_store(path, clinics):
 
 
 def get_store():
-    mode = os.environ.get('DATA_MODE', 'synthetic')
+    mode = os.environ.get('DATA_MODE', 'csv')
     if mode == 'synthetic':
         return None
     if mode != 'csv':

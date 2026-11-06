@@ -26,7 +26,7 @@ ALLOW_EXTERNAL_PATIENT_DATA=false
 
 `*` allows the trusted local reviewer to select any imported clinic. Narrow it to a comma-separated allowlist, such as `CSV_ALLOWED_CLINICS=10,20`, to reject other clinic IDs. The backend rechecks this scope on patient lists, record access and generation. Clinic input is not a replacement for real per-user clinic authorization. CSV mode requires reviewer credentials and is blocked for non-loopback clients and on Render.
 
-By default the database is `private_data/slashdr.sqlite`; set `CSV_DATABASE` to an absolute path to use a different location. All production data and database files are ignored by Git and excluded from deployment archives. `.env.example` keeps `DATA_MODE=synthetic` for the cloud review app.
+By default the database is `private_data/slashdr.sqlite`; set `CSV_DATABASE` to an absolute path to use a different location. All production data and database files are ignored by Git and excluded from deployment archives. `.env.example` now defaults to CSV mode; an isolated synthetic demonstration requires setting `DATA_MODE=synthetic` explicitly.
 
 ## LLM generation with production records
 
@@ -74,3 +74,9 @@ Tests use fictional fixtures and verify complete table import, headers/counts, c
 - `static/index.html` and `static/app.js`: Clinic ID input, patient pagination/search and scope display.
 
 Keep the Render demo in synthetic mode. Moving real records to cloud requires a separate deployment design with per-user authorization, audited access, private persistent storage and governed external model usage; this local integration does not implement those production controls.
+
+## CSV is the default source
+
+The FastAPI application no longer opens `synthetic.json` at startup. The default is `DATA_MODE=csv`. It reads the indexed import of the original CSV files from `CSV_DATABASE`, never a synthetic fallback. Missing or restricted CSV configuration raises a setup error. Synthetic JSON is only opened if `DATA_MODE=synthetic` is deliberately selected.
+
+This change does not copy the database to Render or remove the existing local-only restriction. A Render service explicitly set to synthetic mode still uses synthetic data until its environment is changed. Production CSV hosting remains a separate deployment task; do not change that service to CSV mode expecting data to appear without private storage and authorization being configured.

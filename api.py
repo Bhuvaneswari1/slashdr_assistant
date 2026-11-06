@@ -3,6 +3,7 @@ import base64
 import binascii
 import os
 import secrets
+from functools import lru_cache
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -14,7 +15,14 @@ from core import ROOT, AppError, generate_answer, load_env, load_patients, selec
 from csv_store import DataError, get_store
 
 load_env()
-PATIENTS = load_patients()
+
+
+@lru_cache(maxsize=1)
+def synthetic_patients():
+    # Explicit demonstration mode only. CSV startup never opens a JSON dataset.
+    if os.environ.get('DATA_MODE', 'csv') != 'synthetic':
+        raise DataError('Synthetic records are disabled in CSV mode.')
+    return load_patients()
 REVIEW_USERNAME = os.environ.get('REVIEW_USERNAME', '')
 REVIEW_PASSWORD = os.environ.get('REVIEW_PASSWORD', '')
 if bool(REVIEW_USERNAME) != bool(REVIEW_PASSWORD):
@@ -53,7 +61,7 @@ class PatientSummary(BaseModel):
 
 @app.middleware('http')
 async def review_controls(request: Request, call_next):
-    if os.environ.get('DATA_MODE', 'synthetic') == 'csv' and request.url.path != '/health':
+    if os.environ.get('DATA_MODE', 'csv') == 'csv' and request.url.path != '/health':
         if not REVIEW_USERNAME or not REVIEW_PASSWORD:
             return JSONResponse({'error': 'CSV mode requires reviewer credentials.'}, status_code=503)
         if not request.client or request.client.host not in {'127.0.0.1', '::1'}:
@@ -128,7 +136,7 @@ def status(clinic_id: str | None = None):
     return {'configured': bool(key and key not in {'your_openai_api_key_here', 'replace_me'}),
             'model': os.environ.get('OPENAI_MODEL', 'gpt-4.1-mini'),
             'data_mode': 'csv' if store else 'synthetic',
-            'patient_count': store.patient_count(clinic_id) if store and clinic_id else (0 if store else len(PATIENTS)),
+            'patient_count': store.patient_count(clinic_id) if store and clinic_id else (0 if store else len(synthetic_patients())),
             'generation_enabled': bool(key and key not in {'your_openai_api_key_here', 'replace_me'}) and (not store or os.environ.get('ALLOW_EXTERNAL_PATIENT_DATA') == 'true')}
 
 
@@ -143,7 +151,7 @@ def patients(clinic_id: str | None = None, search: str = '', limit: int = Query(
     store = get_store()
     if store:
         return store.patients(clinic_id, search, limit, offset)
-    return [{'patient_id': p['patient_id'], 'name': p['name']} for p in PATIENTS]
+    return [{'patient_id': p['patient_id'], 'name': p['name']} for p in synthetic_patients()]
 
 
 @app.get('/api/patient', tags=['Patients'])
@@ -152,7 +160,7 @@ def patient(id: str = Query(..., pattern=r'^(?:P\d{3}|DB-\d+)$', examples=['P010
     if store:
         return store.patient(id, clinic_id)
     try:
-        return select_patient(PATIENTS, id)
+        return select_patient(synthetic_patients(), id)
     except AppError as error:
         raise HTTPException(404, str(error)) from None
 
@@ -166,7 +174,7 @@ def generate(body: GenerateRequest):
         selected = store.patient(body.patient_id, body.clinic_id, body.question)
     else:
         try:
-            selected = select_patient(PATIENTS, body.patient_id)
+            selected = select_patient(synthetic_patients(), body.patient_id)
         except AppError as error:
             raise HTTPException(404, str(error)) from None
     try:

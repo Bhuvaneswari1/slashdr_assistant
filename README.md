@@ -2,7 +2,7 @@
 
 ## Full CSV data integration
 
-All 28 relevant tables are imported locally (19,025,648 rows). See [CSV_INTEGRATION.md](CSV_INTEGRATION.md) for the Clinic ID input, local startup, patient search, data mappings and generation settings. The SQLite database stays in ignored `private_data/`; the Render demo defaults to synthetic data.
+All 28 relevant tables are imported locally (19,025,648 rows). See [CSV_INTEGRATION.md](CSV_INTEGRATION.md) for the Clinic ID input, local startup, patient search, data mappings and generation settings. The SQLite database stays in ignored `private_data/`; CSV mode never falls back to synthetic records; the existing Render deployment has not been switched to the local database.
 
 ## Deploy for client review
 

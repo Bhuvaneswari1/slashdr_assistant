@@ -6,6 +6,8 @@ from urllib.parse import urlparse, parse_qs
 from core import ROOT, AppError, load_env, load_patients, select_patient, generate_answer
 
 load_env()
+if __name__ == '__main__' and os.environ.get('DATA_MODE', 'csv') != 'synthetic':
+    raise SystemExit('CSV mode uses FastAPI. Run: python3 -m uvicorn api:app --host 127.0.0.1 --port 8000')
 PATIENTS = load_patients()
 STATIC = {'/': ('index.html', 'text/html; charset=utf-8'),
           '/app.js': ('app.js', 'text/javascript; charset=utf-8'),

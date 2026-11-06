@@ -124,6 +124,13 @@ class CsvIntegrationTests(unittest.TestCase):
         with patch.dict(os.environ,{'DATA_MODE':'csv','RENDER':'true'}):
             with self.assertRaisesRegex(DataError,'local-only'):get_store()
 
+    def test_csv_api_never_loads_synthetic_json(self):
+        with patch.dict(os.environ, {'DATA_MODE': 'csv'}), patch('api.get_store', return_value=self.store), patch('api.load_patients', side_effect=AssertionError('Synthetic JSON must not be opened')), patch.multiple(api, REVIEW_USERNAME='review', REVIEW_PASSWORD='test-only'):
+            import base64
+            headers = {'Authorization': 'Basic ' + base64.b64encode(b'review:test-only').decode()}
+            for url in ['/api/status?clinic_id=10', '/api/patients?clinic_id=10', '/api/patient?id=DB-1&clinic_id=10']:
+                self.assertEqual(asyncio.run(asgi_request(url, headers=headers))[0], 200)
+
     def test_read_only_database_and_no_overwrite(self):
         with self.store.connection() as db:
             with self.assertRaises(sqlite3.OperationalError):db.execute('DELETE FROM people')
