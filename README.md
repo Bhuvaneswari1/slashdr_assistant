@@ -1,5 +1,9 @@
 # SlashDr AI Assistant
 
+## Full CSV data integration
+
+All 28 relevant tables are imported locally (19,025,648 rows). See [CSV_INTEGRATION.md](CSV_INTEGRATION.md) for the Clinic ID input, local startup, patient search, data mappings and generation settings. The SQLite database stays in ignored `private_data/`; the Render demo defaults to synthetic data.
+
 ## Deploy for client review
 
 See [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md) for the Render deployment steps. `render.yaml` declares the Python service, health check and environment values. Use the separate `slashdr-cloud-source.zip` for repository upload; it excludes `.env` and `.venv`. No cloud deployment has been completed just by preparing these files.

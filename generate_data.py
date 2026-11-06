@@ -44,7 +44,7 @@ def generate():
     return patients
 
 if __name__ == '__main__':
-    path = ROOT / 'data' / 'patients.json'
+    path = ROOT / 'data' / 'synthetic.json'
     path.parent.mkdir(exist_ok=True)
     path.write_text(json.dumps(generate(), indent=2) + '\n', encoding='utf-8')
     print('Created exactly 100 synthetic patient histories.')

@@ -3,3 +3,9 @@
 __pycache__/
 *.pyc
 .DS_Store
+
+# Production patient data stays local
+private_data/
+*.sqlite
+*.sqlite-*
+*.sqlite.building

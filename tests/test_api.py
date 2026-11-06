@@ -41,6 +41,9 @@ async def asgi_request(path, method='GET', body=None, headers=None):
 
 class FastAPITests(unittest.TestCase):
     def setUp(self):
+        self.mode_patch = patch.dict('os.environ', {'DATA_MODE': 'synthetic'})
+        self.mode_patch.start()
+        self.addCleanup(self.mode_patch.stop)
         self.auth_patch = patch.multiple(api, REVIEW_USERNAME='', REVIEW_PASSWORD='')
         self.auth_patch.start()
         self.addCleanup(self.auth_patch.stop)
