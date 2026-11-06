@@ -258,8 +258,6 @@ The citation parser now accepts comma/semicolon/pipe/ampersand/and-separated IDs
 
 If the application was already running, stop it with `Ctrl+C`, run `python3 app.py` from this folder again, and refresh the browser. Python does not reload source changes automatically. Your local `.env` is unchanged. The downloadable archive always contains the placeholder `.env.example` content as `.env`; preserve your own key when replacing an existing installation.
 
-## Downloading test review results
+## Downloading answers
 
-After generating an answer, select the overall Pass/Fail result, factual accuracy, citation accuracy and missing-information handling under **Record your review**. Each defaults to **Not reviewed**, so an unassessed answer is never automatically marked as passing. The app measures response time from starting the browser generation request to receiving and parsing the answer, including network time; this is not a model-only latency measurement.
-
-**Download answer for review** exports those assessments, response time, patient ID, question, UTC generation timestamp, answer, cited source IDs, reported missing information and structured JSON in a text file. Review fields reset for every new generation or patient selection. They are retained only in the current page and exported file, not saved to a database. After updating a hosted copy, push `static/app.js` and `static/index.html` to the deployment repository and redeploy Render.
+**Download answer for review** exports the selected patient ID, question, generated answer, source IDs and reported missing information as a text file. Developer evaluation metrics are not included in the application interface or download.

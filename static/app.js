@@ -7,10 +7,6 @@ async function api(path, options) {
   if (!response.ok) throw new Error(body.error || 'Request failed.');
   return body;
 }
-function resetReview() {
-  for (const id of ['review-outcome', 'review-factual', 'review-citation', 'review-missing']) $(id).value = 'Not reviewed';
-  $('response-time').textContent = '';
-}
 function message(text, error = false) { $('message').textContent = text; $('message').className = error ? 'error' : ''; }
 function recordElement(record) {
   const detail = document.createElement('details'); detail.id = `record-${record.record_id}`;
@@ -31,7 +27,7 @@ function filterPatients() {
 }
 async function loadPatient() {
   const version = ++selectionVersion;
-  selected = null; lastResult = null; resetReview(); $('result').hidden = true; $('records').replaceChildren(); $('profile').replaceChildren(); $('count').textContent = ''; message(''); $('generate').disabled = true;
+  selected = null; lastResult = null; $('result').hidden = true; $('records').replaceChildren(); $('profile').replaceChildren(); $('count').textContent = ''; message(''); $('generate').disabled = true;
   if (!$('patient').value) { message('No matching patients. Try another search.'); return; }
   try {
     const patient = await api(`/api/patient?id=${encodeURIComponent($('patient').value)}`);
@@ -53,15 +49,12 @@ $('ask').addEventListener('submit', async event => {
   event.preventDefault(); if (!selected || busy || !configured) return;
   const patientId = selected.patient_id, version = selectionVersion, question = $('question').value;
   busy = true; $('generate').disabled = true; $('result').hidden = true; lastResult = null;
-  resetReview();
-  const startedAt = performance.now();
+
   message('Reading the selected records and generating an answer…');
   try {
     const result = await api('/api/generate', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({patient_id: patientId, question})});
     if (version !== selectionVersion || result.patient_id !== selected?.patient_id) return;
-    const responseTimeSeconds = Number(((performance.now() - startedAt) / 1000).toFixed(2));
-    lastResult = {...result, question, response_time_seconds: responseTimeSeconds, generated_at: new Date().toISOString()};
-    $('response-time').textContent = `Response time: ${responseTimeSeconds.toFixed(2)} seconds (browser request to received answer, including network time).`;
+    lastResult = {...result, question};
     $('answer').textContent = result.answer;
     $('missing').textContent = result.missing_information.length ? `Missing information: ${result.missing_information.join('; ')}` : '';
     $('sources').replaceChildren();
@@ -76,31 +69,7 @@ $('ask').addEventListener('submit', async event => {
 });
 $('download').addEventListener('click', () => {
   if (!lastResult) return;
-  const review = {
-    pass_fail: $('review-outcome').value,
-    factual_accuracy: $('review-factual').value,
-    citation_accuracy: $('review-citation').value,
-    missing_information_handling: $('review-missing').value,
-    response_time_seconds: lastResult.response_time_seconds,
-  };
-  const report = [
-    'SYNTHETIC DEMO — AI DRAFT FOR REVIEW',
-    `Patient: ${lastResult.patient_id}`,
-    `Generated at (UTC): ${lastResult.generated_at}`,
-    `Question: ${lastResult.question}`,
-    '', 'REVIEW ASSESSMENT (entered by reviewer)',
-    `Pass/Fail: ${review.pass_fail}`,
-    `Factual accuracy: ${review.factual_accuracy}`,
-    `Citation accuracy: ${review.citation_accuracy}`,
-    `Missing-information handling: ${review.missing_information_handling}`,
-    `Response time: ${review.response_time_seconds.toFixed(2)} seconds`,
-    'Timing includes network and server processing, measured in the browser.',
-    '', 'ANSWER', lastResult.answer,
-    '', 'SOURCE RECORD IDS', lastResult.source_ids.join(', ') || 'None cited',
-    '', 'REPORTED MISSING INFORMATION', lastResult.missing_information.join('; ') || 'None reported',
-    '', 'STRUCTURED RESULT', JSON.stringify({...lastResult, review}, null, 2),
-  ].join('\n');
-  const blob = new Blob([report], {type: 'text/plain;charset=utf-8'});
+  const blob = new Blob([`SYNTHETIC DEMO — AI DRAFT FOR REVIEW\n\n${JSON.stringify(lastResult, null, 2)}`], {type: 'text/plain'});
   const url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = `slashdr-${lastResult.patient_id}-draft.txt`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
 });
 (async () => {
