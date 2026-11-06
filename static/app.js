@@ -84,7 +84,7 @@ $('ask').addEventListener('submit', async event => {
 });
 $('download').addEventListener('click', () => {
   if (!lastResult) return;
-  const blob = new Blob([`${dataMode === 'csv' ? 'LOCAL PATIENT RECORDS' : 'SYNTHETIC DEMO'} — AI DRAFT FOR REVIEW\n\n${JSON.stringify(lastResult, null, 2)}`], {type: 'text/plain'});
+  const blob = new Blob([`${dataMode === 'csv' ? 'IMPORTED PATIENT RECORDS' : 'SYNTHETIC DEMO'} — AI DRAFT FOR REVIEW\n\n${JSON.stringify(lastResult, null, 2)}`], {type: 'text/plain'});
   const url = URL.createObjectURL(blob), a = document.createElement('a'); a.href = url; a.download = `slashdr-${lastResult.patient_id}-draft.txt`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
 });
 async function searchCsvPatients(reset = false) {
@@ -116,7 +116,7 @@ $('clinic-load').addEventListener('click', async () => {
   try {
     const status = await api(`/api/status?clinic_id=${encodeURIComponent(clinicId)}`);
     configured = status.generation_enabled;
-    $('status').textContent = `${status.patient_count} patients in clinic ${clinicId}. ${configured ? 'External generation enabled.' : 'Local record review enabled. External generation disabled.'}`;
+    $('status').textContent = `${status.patient_count} patients in clinic ${clinicId}. ${configured ? 'External generation enabled.' : 'Record review enabled. External generation disabled.'}`;
     await searchCsvPatients(true);
   } catch (error) { message(error.message, true); }
 });
@@ -130,9 +130,9 @@ $('patients-next').addEventListener('click', () => {pageOffset += 50; searchCsvP
     if (dataMode === 'csv') {
       $('clinic-controls').hidden = false; $('patient-pages').hidden = false;
       $('search-label').textContent = 'Find by exact patient ID'; $('search').placeholder = 'For example DB-123 or 123';
-      $('data-notice').textContent = 'Local production CSV records · Select a Clinic ID · External LLM generation is disabled unless explicitly enabled';
+      $('data-notice').textContent = 'Imported CSV patient records · Select an authorized Clinic ID · AI answers require clinician review';
       $('records-help').textContent = 'Open a source to inspect the imported CSV row. See the scope notes for retrieval limits.';
-      $('status').textContent = 'Enter a Clinic ID, then load its patients. Production CSV access is local only.';
+      $('status').textContent = 'Enter an authorized Clinic ID, then load its patients.';
       $('generate').disabled = true;
       const clinics = await api('/api/clinics');
       for (const clinic of clinics) {

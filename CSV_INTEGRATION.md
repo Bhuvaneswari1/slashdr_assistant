@@ -80,3 +80,7 @@ Keep the Render demo in synthetic mode. Moving real records to cloud requires a 
 The FastAPI application no longer opens `synthetic.json` at startup. The default is `DATA_MODE=csv`. It reads the indexed import of the original CSV files from `CSV_DATABASE`, never a synthetic fallback. Missing or restricted CSV configuration raises a setup error. Synthetic JSON is only opened if `DATA_MODE=synthetic` is deliberately selected.
 
 This change does not copy the database to Render or remove the existing local-only restriction. A Render service explicitly set to synthetic mode still uses synthetic data until its environment is changed. Production CSV hosting remains a separate deployment task; do not change that service to CSV mode expecting data to appear without private storage and authorization being configured.
+
+## Updated Render access
+
+Cloud CSV mode can now use named reviewer accounts with per-user clinic scopes instead of the old blanket local-only restriction. Storage still must be provisioned separately; nothing has been uploaded or deployed automatically. See [RENDER_CSV_OPTIONS.md](RENDER_CSV_OPTIONS.md) for free-hosting alternatives and account configuration. Earlier local-only statements in this document describe the initial integration and are superseded by this section.

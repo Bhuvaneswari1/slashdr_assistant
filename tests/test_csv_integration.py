@@ -122,7 +122,7 @@ class CsvIntegrationTests(unittest.TestCase):
             self.assertEqual(asyncio.run(asgi_request('/api/patients?clinic_id=10'))[0],503)
         from csv_store import get_store
         with patch.dict(os.environ,{'DATA_MODE':'csv','RENDER':'true'}):
-            with self.assertRaisesRegex(DataError,'local-only'):get_store()
+            with self.assertRaisesRegex(DataError,'Cloud CSV access'):get_store()
 
     def test_csv_api_never_loads_synthetic_json(self):
         with patch.dict(os.environ, {'DATA_MODE': 'csv'}), patch('api.get_store', return_value=self.store), patch('api.load_patients', side_effect=AssertionError('Synthetic JSON must not be opened')), patch.multiple(api, REVIEW_USERNAME='review', REVIEW_PASSWORD='test-only'):
@@ -130,6 +130,38 @@ class CsvIntegrationTests(unittest.TestCase):
             headers = {'Authorization': 'Basic ' + base64.b64encode(b'review:test-only').decode()}
             for url in ['/api/status?clinic_id=10', '/api/patients?clinic_id=10', '/api/patient?id=DB-1&clinic_id=10']:
                 self.assertEqual(asyncio.run(asgi_request(url, headers=headers))[0], 200)
+
+    def test_named_cloud_accounts_enforce_individual_clinics(self):
+        import base64
+        from review_auth import hash_password
+        accounts = {
+            'review-a': {'password_hash': hash_password('test-password-for-a'), 'clinic_ids': ['10']},
+            'review-b': {'password_hash': hash_password('test-password-for-b'), 'clinic_ids': ['20']},
+        }
+        def auth(username, password):
+            return {'Authorization': 'Basic ' + base64.b64encode((username + ':' + password).encode()).decode()}
+        settings = {'DATA_MODE': 'csv', 'RENDER': 'true', 'CLOUD_CSV_ENABLED': 'true',
+                    'CSV_DATABASE': str(self.database), 'CSV_STORAGE_DIR': str(self.database.parent),
+                    'CSV_ALLOWED_CLINICS': '*', 'REVIEW_ACCOUNTS_JSON': json.dumps(accounts)}
+        with patch.dict(os.environ, settings):
+            self.assertEqual(asyncio.run(asgi_request('/api/patients?clinic_id=10'))[0], 401)
+            self.assertEqual(asyncio.run(asgi_request('/health'))[0], 200)
+            a = auth('review-a', 'test-password-for-a')
+            b = auth('review-b', 'test-password-for-b')
+            self.assertEqual(asyncio.run(asgi_request('/api/patients?clinic_id=10', headers=a))[0], 200)
+            self.assertEqual(asyncio.run(asgi_request('/api/patients?clinic_id=20', headers=a))[0], 400)
+            self.assertEqual(asyncio.run(asgi_request('/api/patients?clinic_id=20', headers=b))[0], 200)
+            self.assertEqual(asyncio.run(asgi_request('/api/patients?clinic_id=10', headers=b))[0], 400)
+            code, body, _ = asyncio.run(asgi_request('/api/clinics', headers=a))
+            self.assertEqual(json.loads(body), [{'clinic_id': '10', 'name': 'Clinic 10'}])
+            self.assertEqual(asyncio.run(asgi_request('/docs', headers=auth('review-a', 'incorrect')))[0], 401)
+        from csv_store import REQUEST_CLINICS
+        self.assertIsNone(REQUEST_CLINICS.get())
+
+    def test_cloud_accounts_reject_wildcard_clinics(self):
+        from review_auth import parse_accounts, AuthConfigError, hash_password
+        raw = json.dumps({'user': {'password_hash': hash_password('long-test-password'), 'clinic_ids': ['*']}})
+        with self.assertRaises(AuthConfigError): parse_accounts(raw)
 
     def test_read_only_database_and_no_overwrite(self):
         with self.store.connection() as db:

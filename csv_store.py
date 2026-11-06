@@ -1,6 +1,7 @@
 """Read-only, clinic-scoped access to the locally imported CSV database."""
 import calendar
 from contextlib import contextmanager
+from contextvars import ContextVar
 from functools import lru_cache
 import json
 import os
@@ -9,6 +10,7 @@ import re
 import sqlite3
 
 ROOT = Path(__file__).resolve().parent
+REQUEST_CLINICS = ContextVar('request_clinics', default=None)
 VISIT_TABLES = ['person_states', 'person_summaries', 'vital_answers', 'history_answers',
                 'symptoms_answers', 'diagnosis_answers', 'complaint_answers', 'prescriptions',
                 'investigations', 'pdfs', 'pdf_patients', 'next_visit_instructions']
@@ -254,9 +256,16 @@ def get_store():
         return None
     if mode != 'csv':
         raise DataError('DATA_MODE must be synthetic or csv.')
-    # Production CSV integration is local-only until real per-user authorization is provided.
-    if os.environ.get('RENDER') == 'true':
-        raise DataError('Production CSV mode is local-only. Keep DATA_MODE=synthetic on the review deployment.')
-    clinics = tuple(c.strip() for c in os.environ.get('CSV_ALLOWED_CLINICS', '').split(',') if c.strip())
+    cloud = os.environ.get('RENDER') == 'true'
+    if cloud and os.environ.get('CLOUD_CSV_ENABLED') != 'true':
+        raise DataError('Cloud CSV access is not configured. Set CLOUD_CSV_ENABLED=true after configuring the persistent disk and named reviewer accounts.')
+    scoped = REQUEST_CLINICS.get()
+    clinics = scoped if scoped is not None else tuple(c.strip() for c in os.environ.get('CSV_ALLOWED_CLINICS', '').split(',') if c.strip())
     path = os.environ.get('CSV_DATABASE', str(ROOT / 'private_data' / 'slashdr.sqlite'))
+    if cloud:
+        if scoped is None or not clinics or '*' in clinics:
+            raise DataError('Cloud CSV access requires an authenticated named account with explicit clinic permissions.')
+        storage = Path(os.environ.get('CSV_STORAGE_DIR', '/var/data')).resolve()
+        if not Path(path).resolve().is_relative_to(storage):
+            raise DataError('CSV_DATABASE must be inside the configured persistent CSV_STORAGE_DIR.')
     return _cached_store(path, clinics)

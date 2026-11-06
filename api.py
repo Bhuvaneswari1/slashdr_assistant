@@ -12,7 +12,9 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from core import ROOT, AppError, generate_answer, load_env, load_patients, select_patient
-from csv_store import DataError, get_store
+from csv_store import DataError, REQUEST_CLINICS, get_store
+from review_auth import AuthConfigError, authenticate_account, parse_accounts
+from starlette.concurrency import run_in_threadpool
 
 load_env()
 
@@ -27,12 +29,12 @@ REVIEW_USERNAME = os.environ.get('REVIEW_USERNAME', '')
 REVIEW_PASSWORD = os.environ.get('REVIEW_PASSWORD', '')
 if bool(REVIEW_USERNAME) != bool(REVIEW_PASSWORD):
     raise RuntimeError('Set both REVIEW_USERNAME and REVIEW_PASSWORD, or leave both unset for local development.')
-if os.environ.get('RENDER') == 'true' and not REVIEW_PASSWORD:
-    raise RuntimeError('Set REVIEW_USERNAME and REVIEW_PASSWORD in Render before starting the review service.')
+if os.environ.get('RENDER') == 'true' and not REVIEW_PASSWORD and not os.environ.get('REVIEW_ACCOUNTS_JSON'):
+    raise RuntimeError('Configure REVIEW_ACCOUNTS_JSON (or legacy demo credentials) before starting the Render service.')
 
 app = FastAPI(
     title='SlashDr Patient Records API', version='1.1.0',
-    description='Read-only synthetic patient review demo. Answers require clinician verification. '
+    description='Read-only patient record assistant. Answers require clinician verification. '
                 'The OpenAI key stays on the server. Reviewer credentials, if configured, use HTTP Basic authentication.',
 )
 
@@ -61,30 +63,48 @@ class PatientSummary(BaseModel):
 
 @app.middleware('http')
 async def review_controls(request: Request, call_next):
-    if os.environ.get('DATA_MODE', 'csv') == 'csv' and request.url.path != '/health':
-        if not REVIEW_USERNAME or not REVIEW_PASSWORD:
-            return JSONResponse({'error': 'CSV mode requires reviewer credentials.'}, status_code=503)
-        if not request.client or request.client.host not in {'127.0.0.1', '::1'}:
-            return JSONResponse({'error': 'Production CSV mode is restricted to local access.'}, status_code=403)
-    if REVIEW_PASSWORD and request.url.path != '/health':
-        authenticated = False
+    scoped_clinics = None
+    protected = request.url.path != '/health'
+    csv_mode = os.environ.get('DATA_MODE', 'csv') == 'csv'
+    cloud = os.environ.get('RENDER') == 'true'
+    account_json = os.environ.get('REVIEW_ACCOUNTS_JSON', '').strip()
+    challenge = {'WWW-Authenticate': 'Basic realm="SlashDr review"', 'Cache-Control': 'no-store'}
+    if protected and csv_mode and cloud:
+        if os.environ.get('CLOUD_CSV_ENABLED') != 'true' or not account_json:
+            return JSONResponse({'error': 'Configure CLOUD_CSV_ENABLED=true, named REVIEW_ACCOUNTS_JSON accounts and the persistent database before enabling Render CSV access.'}, status_code=503)
+    if protected and account_json:
         try:
-            scheme, token = request.headers.get('authorization', '').split(' ', 1)
-            if scheme.lower() == 'basic':
-                user, password = base64.b64decode(token, validate=True).decode('utf-8').split(':', 1)
-                user_ok = secrets.compare_digest(user.encode(), REVIEW_USERNAME.encode())
-                password_ok = secrets.compare_digest(password.encode(), REVIEW_PASSWORD.encode())
-                authenticated = user_ok and password_ok
-        except (ValueError, UnicodeError, binascii.Error):
-            pass
-        if not authenticated:
-            return JSONResponse({'error': 'Reviewer login required.'}, status_code=401,
-                                headers={'WWW-Authenticate': 'Basic realm="SlashDr review"', 'Cache-Control': 'no-store'})
+            accounts = parse_accounts(account_json)
+        except AuthConfigError as error:
+            return JSONResponse({'error': str(error)}, status_code=503)
+        scoped_clinics = await run_in_threadpool(authenticate_account, request.headers.get('authorization', ''), accounts)
+        if scoped_clinics is None:
+            return JSONResponse({'error': 'Reviewer login required.'}, status_code=401, headers=challenge)
+    elif protected:
+        if csv_mode and (not REVIEW_USERNAME or not REVIEW_PASSWORD):
+            return JSONResponse({'error': 'CSV mode requires reviewer credentials.'}, status_code=503)
+        if REVIEW_PASSWORD:
+            authenticated = False
+            try:
+                scheme, token = request.headers.get('authorization', '').split(' ', 1)
+                if scheme.lower() == 'basic':
+                    user, password = base64.b64decode(token, validate=True).decode('utf-8').split(':', 1)
+                    user_ok = secrets.compare_digest(user.encode(), REVIEW_USERNAME.encode())
+                    password_ok = secrets.compare_digest(password.encode(), REVIEW_PASSWORD.encode())
+                    authenticated = user_ok and password_ok
+            except (ValueError, UnicodeError, binascii.Error):
+                pass
+            if not authenticated:
+                return JSONResponse({'error': 'Reviewer login required.'}, status_code=401, headers=challenge)
     # UI and Swagger are served from the same origin; external browser calls are not needed.
     origin = request.headers.get('origin')
     if origin and urlsplit(origin).netloc != request.headers.get('host'):
         return JSONResponse({'error': 'Cross-origin requests are not allowed.'}, status_code=403)
-    response = await call_next(request)
+    scope_token = REQUEST_CLINICS.set(scoped_clinics)
+    try:
+        response = await call_next(request)
+    finally:
+        REQUEST_CLINICS.reset(scope_token)
     response.headers['Cache-Control'] = 'no-store'
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'DENY'
