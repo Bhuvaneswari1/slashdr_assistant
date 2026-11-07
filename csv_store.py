@@ -95,8 +95,8 @@ class CsvStore:
     def patients(self, clinic_id, search='', limit=50, offset=0):
         clinic_id = self.clinic(clinic_id)
         search = search.strip()
-        if search.upper().startswith('DB-'):
-            search = search[3:]
+        if search.upper().startswith('P'):
+            search = search[1:]
         if search and not search.isdigit():
             return []
         with self.connection() as db:
@@ -105,11 +105,11 @@ class CsvStore:
             if search:
                 sql += ' AND p.id=?'; args.append(search)
             sql += ' ORDER BY CAST(p.id AS INTEGER), p.id LIMIT ? OFFSET ?'; args.extend([min(limit, 100), offset])
-            return [{'patient_id': 'DB-' + r['id'], 'name': 'Patient ' + r['id']} for r in db.execute(sql, args)]
+            return [{'patient_id': 'P' + r['id'], 'name': 'Patient ' + r['id']} for r in db.execute(sql, args)]
 
     def personal_info(self, patient_id, clinic_id):
         clinic_id = self.clinic(clinic_id)
-        match = re.fullmatch(r'DB-(\d+)', patient_id or '')
+        match = re.fullmatch(r'P(\d+)', patient_id or '')
         if not match:
             raise DataError('Select an imported patient ID.')
         person_id = match[1]
@@ -189,9 +189,9 @@ class CsvStore:
 
     def patient(self, patient_id, clinic_id, question=''):
         clinic_id = self.clinic(clinic_id)
-        match = re.fullmatch(r'DB-(\d+)', patient_id or '')
+        match = re.fullmatch(r'P(\d+)', patient_id or '')
         if not match:
-            raise DataError('Select an imported patient ID, such as DB-123.')
+            raise DataError('Select an imported patient ID, such as P123.')
         person_id = match[1]
         with self.connection() as db:
             profile = db.execute('SELECT p.* FROM people p JOIN clinic_patients c ON p.id=c.person_id WHERE p.id=? AND c.clinic_id=?', (person_id, clinic_id)).fetchone()

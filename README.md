@@ -322,3 +322,5 @@ Names and email come from a separate private UI profile index. They are not adde
 Keep both databases and the original CSV exports out of GitHub. The source ZIP excludes them and `.env`.
 
 Validation: `node tests/test_navigation.cjs` checks automatic clinic selection, sequential navigation, page boundaries, end-of-list behavior and popup clearing. Python tests check numeric ordering, clinic isolation, missing profile handling and exclusion of UI identity fields from clinical context.
+
+Imported patient IDs display as `P` followed by the original numeric `people.id` (for example `P22791`). Exact search accepts either `P22791` or `22791`. The stored database ID remains unchanged; no reimport is needed.

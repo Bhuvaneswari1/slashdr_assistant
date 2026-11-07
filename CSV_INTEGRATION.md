@@ -12,7 +12,7 @@ source .venv/bin/activate
 python3 -m uvicorn api:app --host 127.0.0.1 --port 8000
 ```
 
-Open <http://127.0.0.1:8000/>, sign in, enter a Clinic ID using the available suggestions, and click **Load clinic patients**. Patient labels use `DB-<original person ID>` because the exported input intentionally omitted names. Browse 50 patients per page or search an exact original ID or `DB-` ID. No synthetic patient is mixed with imported records.
+Open <http://127.0.0.1:8000/>, sign in, enter a Clinic ID using the available suggestions, and click **Load clinic patients**. Patient labels use `P<original person ID>` because the exported input intentionally omitted names. Browse 50 patients per page or search an exact original ID or `P` ID. No synthetic patient is mixed with imported records.
 
 Use the FastAPI `api.py` entry point for CSV mode. The legacy `python3 app.py` serves the synthetic demo only.
 

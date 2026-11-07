@@ -72,28 +72,30 @@ class CsvIntegrationTests(unittest.TestCase):
         self.assertEqual(sum(r[1] for r in rows),self.imported)
 
     def test_clinic_search_and_unknown_patient(self):
-        self.assertEqual(self.store.patients('10'),[{'patient_id':'DB-1','name':'Patient 1'}])
-        self.assertEqual(self.store.patients('10','DB-2'),[])
+        self.assertEqual(self.store.patients('10'),[{'patient_id':'P1','name':'Patient 1'}])
+        self.assertEqual(self.store.patients('10','P2'),[])
         self.assertEqual(self.store.patient_count('10'),1)
-        with self.assertRaises(DataError):self.store.patient('DB-2','10')
-        with self.assertRaises(DataError):self.store.patient('DB-1','20')
+        self.assertEqual(self.store.patients('10', 'P1'), self.store.patients('10', '1'))
+        self.assertEqual(self.store.patients('10', 'p1')[0]['patient_id'], 'P1')
+        with self.assertRaises(DataError):self.store.patient('P2','10')
+        with self.assertRaises(DataError):self.store.patient('P1','20')
         with self.assertRaises(DataError):self.store.patients('10 OR 1=1')
         with self.assertRaises(DataError):self.store.patients('')
 
     def test_patient_appointment_and_clinic_isolation(self):
-        patient=self.store.patient('DB-1','10')
+        patient=self.store.patient('P1','10')
         content=json.dumps(patient)
         for secret in ['OTHER_CLINIC_SECRET','OTHER_PATIENT_SECRET','ORPHAN_SECRET','AMBIGUOUS_CLINIC_SECRET']:
             self.assertNotIn(secret,content)
         vital=next(r for r in patient['records'] if r['source_table']=='vital_answers')
         self.assertEqual(vital['data']['value'],'120')
         self.assertEqual(vital['data']['lookup_context']['question_id']['unit'],'mmHg')
-        self.assertTrue(all(r['record_id'].startswith('DB-1-') for r in patient['records']))
+        self.assertTrue(all(r['record_id'].startswith('P1-') for r in patient['records']))
 
     def test_date_filter_and_no_evidence(self):
-        september=self.store.patient('DB-1','10','Show September 2026 observations')
+        september=self.store.patient('P1','10','Show September 2026 observations')
         self.assertEqual(september['context_scope']['matching_visits'],1)
-        october=self.store.patient('DB-1','10','Show October 2026 observations')
+        october=self.store.patient('P1','10','Show October 2026 observations')
         self.assertEqual(october['context_scope']['matching_visits'],0)
         self.assertEqual(len(october['records']),1)
         self.assertEqual(month_range('December 2026'),('2026-12-01','2027-01-01'))
@@ -101,17 +103,17 @@ class CsvIntegrationTests(unittest.TestCase):
     def test_real_data_transmission_disabled_before_network(self):
         with patch.dict(os.environ,{'ALLOW_EXTERNAL_PATIENT_DATA':'false'}):
             with self.assertRaisesRegex(core.AppError,'External generation'):
-                core.generate_answer(self.store.patient('DB-1','10'),'Summary',opener=lambda *a,**k:self.fail('Network must not be called'))
+                core.generate_answer(self.store.patient('P1','10'),'Summary',opener=lambda *a,**k:self.fail('Network must not be called'))
 
     def test_csv_routes_require_clinic_and_keep_source_records(self):
-        result={'patient_id':'DB-1','answer':'BP recorded [DB-1-vital_answers-501].',
-                'source_ids':['DB-1-vital_answers-501'],'missing_information':[]}
+        result={'patient_id':'P1','answer':'BP recorded [P1-vital_answers-501].',
+                'source_ids':['P1-vital_answers-501'],'missing_information':[]}
         with patch.dict(os.environ,{'DATA_MODE':'synthetic'}), patch('api.get_store',return_value=self.store), patch.multiple(api,REVIEW_USERNAME='',REVIEW_PASSWORD=''):
             status,body,_=asyncio.run(asgi_request('/api/patients?clinic_id=10'))
             self.assertEqual(status,200);self.assertEqual(len(json.loads(body)),1)
             self.assertEqual(asyncio.run(asgi_request('/api/patients'))[0],400)
             with patch('api.generate_answer',return_value=result):
-                status,body,_=asyncio.run(asgi_request('/api/generate','POST',{'patient_id':'DB-1','clinic_id':'10','question':'BP'}))
+                status,body,_=asyncio.run(asgi_request('/api/generate','POST',{'patient_id':'P1','clinic_id':'10','question':'BP'}))
                 output=json.loads(body)
                 self.assertEqual(status,200)
                 self.assertEqual(output['source_records'][0]['source_id'],'501')
@@ -128,7 +130,7 @@ class CsvIntegrationTests(unittest.TestCase):
         with patch.dict(os.environ, {'DATA_MODE': 'csv'}), patch('api.get_store', return_value=self.store), patch('api.load_patients', side_effect=AssertionError('Synthetic JSON must not be opened')), patch.multiple(api, REVIEW_USERNAME='review', REVIEW_PASSWORD='test-only'):
             import base64
             headers = {'Authorization': 'Basic ' + base64.b64encode(b'review:test-only').decode()}
-            for url in ['/api/status?clinic_id=10', '/api/patients?clinic_id=10', '/api/patient?id=DB-1&clinic_id=10']:
+            for url in ['/api/status?clinic_id=10', '/api/patients?clinic_id=10', '/api/patient?id=P1&clinic_id=10']:
                 self.assertEqual(asyncio.run(asgi_request(url, headers=headers))[0], 200)
 
     def test_named_cloud_accounts_enforce_individual_clinics(self):
@@ -172,8 +174,8 @@ class CsvIntegrationTests(unittest.TestCase):
                 db.executemany('INSERT INTO clinic_patients VALUES (?,?)', [('10', '100'), ('10', '2'), ('10', '10')])
                 db.commit()
             store = CsvStore(path, ['10'])
-            self.assertEqual([p['patient_id'] for p in store.patients('10', limit=2)], ['DB-2', 'DB-10'])
-            self.assertEqual([p['patient_id'] for p in store.patients('10', limit=2, offset=2)], ['DB-100'])
+            self.assertEqual([p['patient_id'] for p in store.patients('10', limit=2)], ['P2', 'P10'])
+            self.assertEqual([p['patient_id'] for p in store.patients('10', limit=2, offset=2)], ['P100'])
 
     def test_personal_info_is_clinic_scoped_and_ui_only(self):
         from build_patient_profiles import build_profiles, FIELDS
@@ -185,17 +187,17 @@ class CsvIntegrationTests(unittest.TestCase):
             with contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(build_profiles(source, output), 1)
             with patch.dict(os.environ, {'UI_PROFILE_DATABASE': str(output), 'RENDER': 'false'}):
-                info = self.store.personal_info('DB-1', '10')
+                info = self.store.personal_info('P1', '10')
                 self.assertEqual(info['fields']['Name'], 'UI_ONLY_TEST_NAME')
                 self.assertEqual(info['fields']['Email'], 'ui-only@example.test')
                 self.assertEqual(info['fields']['Latest appointment in this clinic'], '2026-09-18')
-                with self.assertRaises(DataError): self.store.personal_info('DB-2', '10')
-                with self.assertRaises(DataError): self.store.personal_info('DB-1', '20')
-                clinical = json.dumps(self.store.patient('DB-1', '10'))
+                with self.assertRaises(DataError): self.store.personal_info('P2', '10')
+                with self.assertRaises(DataError): self.store.personal_info('P1', '20')
+                clinical = json.dumps(self.store.patient('P1', '10'))
                 self.assertNotIn('UI_ONLY_TEST_NAME', clinical)
                 self.assertNotIn('ui-only@example.test', clinical)
             with patch.dict(os.environ, {'UI_PROFILE_DATABASE': str(output) + '.missing'}):
-                self.assertIsNone(self.store.personal_info('DB-1', '10')['fields']['Name'])
+                self.assertIsNone(self.store.personal_info('P1', '10')['fields']['Name'])
 
     def test_read_only_database_and_no_overwrite(self):
         with self.store.connection() as db:

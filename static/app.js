@@ -210,7 +210,7 @@ $('patients-next').addEventListener('click', () => navigatePatient(1));
     configured = status.generation_enabled ?? status.configured; generationHelp();
     if (dataMode === 'csv') {
       $('clinic-controls').hidden = false; $('patient-pages').hidden = false;
-      $('search-label').textContent = 'Find by exact patient ID'; $('search').placeholder = 'For example DB-123 or 123';
+      $('search-label').textContent = 'Find by exact patient ID'; $('search').placeholder = 'For example P123 or 123';
       $('data-notice').textContent = 'Imported CSV patient records · Select an authorized Clinic ID · AI answers require clinician review';
       $('records-help').textContent = 'Open a source to inspect the imported CSV row. See the scope notes for retrieval limits.';
       $('status').textContent = 'Enter an authorized Clinic ID, then load its patients.';

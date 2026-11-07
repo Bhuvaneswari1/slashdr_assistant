@@ -43,7 +43,7 @@ app = FastAPI(
 
 class GenerateRequest(BaseModel):
     model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
-    patient_id: str = Field(pattern=r'^(?:P\d{3}|DB-\d+)$', examples=['P010', 'DB-123'])
+    patient_id: str = Field(pattern=r'^P\d+$', examples=['P010', 'P123'])
     clinic_id: str | None = Field(default=None, pattern=r'^\d+$')
     question: str = Field(min_length=1, max_length=2000,
                           examples=['Summarise this patient before the next visit.'])
@@ -181,7 +181,7 @@ def patients(clinic_id: str | None = None, search: str = '', limit: int = Query(
 
 
 @app.get('/api/patient', tags=['Patients'])
-def patient(id: str = Query(..., pattern=r'^(?:P\d{3}|DB-\d+)$', examples=['P010']), clinic_id: str | None = None):
+def patient(id: str = Query(..., pattern=r'^P\d+$', examples=['P010']), clinic_id: str | None = None):
     store = get_store()
     if store:
         return store.patient(id, clinic_id)
@@ -192,7 +192,7 @@ def patient(id: str = Query(..., pattern=r'^(?:P\d{3}|DB-\d+)$', examples=['P010
 
 
 @app.get('/api/patient-info', tags=['Patients'])
-def patient_info(id: str = Query(..., pattern=r'^(?:P\d{3}|DB-\d+)$'), clinic_id: str | None = None):
+def patient_info(id: str = Query(..., pattern=r'^P\d+$'), clinic_id: str | None = None):
     store = get_store()
     if store:
         return store.personal_info(id, clinic_id)

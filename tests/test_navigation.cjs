@@ -16,7 +16,7 @@ class Element {
 const elements = new Map();
 const element = id => { if(!elements.has(id)) elements.set(id,new Element()); return elements.get(id); };
 element('patient').isSelect=true;
-const ids=Array.from({length:105},(_,i)=>`DB-${i+1}`);
+const ids=Array.from({length:105},(_,i)=>`P${i+1}`);
 const context=vm.createContext({document:{getElementById:element,querySelectorAll:()=>[],createElement:()=>new Element()},AbortController,setTimeout,clearTimeout,console,
   fetch:async path=>{
     const url=new URL(path,'http://test'); let body;
@@ -33,18 +33,18 @@ const context=vm.createContext({document:{getElementById:element,querySelectorAl
   vm.runInContext(fs.readFileSync('static/app.js','utf8'),context);
   for(let i=0;i<12;i++) await new Promise(setImmediate);
   assert.equal(element('clinic-id').value,'13'); assert.equal(element('clinic-id').disabled,true);
-  assert.equal(element('clinic-load').hidden,true); assert.equal(element('patient').value,'DB-1');
+  assert.equal(element('clinic-load').hidden,true); assert.equal(element('patient').value,'P1');
   assert.equal(element('patients-previous').disabled,true);
-  await element('patients-next').handlers.click(); assert.equal(element('patient').value,'DB-2');
-  await element('patients-previous').handlers.click(); assert.equal(element('patient').value,'DB-1');
+  await element('patients-next').handlers.click(); assert.equal(element('patient').value,'P2');
+  await element('patients-previous').handlers.click(); assert.equal(element('patient').value,'P1');
   element('patient').selectedIndex=49; await element('patient').handlers.change();
-  await element('patients-next').handlers.click(); assert.equal(element('patient').value,'DB-51');
-  await element('patients-previous').handlers.click(); assert.equal(element('patient').value,'DB-50');
+  await element('patients-next').handlers.click(); assert.equal(element('patient').value,'P51');
+  await element('patients-previous').handlers.click(); assert.equal(element('patient').value,'P50');
   await element('patient-info').handlers.click(); assert.equal(element('patient-dialog').open,true);
   assert.equal(element('patient-info-fields').children[1].textContent,'Fictional popup name');
   await element('patients-next').handlers.click(); assert.equal(element('patient-dialog').open,false);
   assert.equal(element('patient-info-fields').children.length,0);
   for(let i=0;i<54;i++) await element('patients-next').handlers.click();
-  assert.equal(element('patient').value,'DB-105'); assert.equal(element('patients-next').disabled,true);
+  assert.equal(element('patient').value,'P105'); assert.equal(element('patients-next').disabled,true);
   console.log('Passed: assigned clinic, sequential navigation, both page boundaries, last patient, popup and stale-detail clearing.');
 })().catch(error=>{console.error(error);process.exitCode=1;});
