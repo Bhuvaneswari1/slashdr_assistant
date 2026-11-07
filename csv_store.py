@@ -39,6 +39,16 @@ def month_range(question):
     return None
 
 
+@contextmanager
+def profile_connection(path):
+    db = sqlite3.connect(path.as_uri() + '?mode=ro', uri=True)
+    db.row_factory = sqlite3.Row
+    try:
+        yield db
+    finally:
+        db.close()
+
+
 class CsvStore:
     def __init__(self, path, allowed_clinics):
         self.path = Path(path).resolve()
@@ -94,8 +104,50 @@ class CsvStore:
             args = [clinic_id]
             if search:
                 sql += ' AND p.id=?'; args.append(search)
-            sql += ' ORDER BY p.id LIMIT ? OFFSET ?'; args.extend([min(limit, 100), offset])
+            sql += ' ORDER BY CAST(p.id AS INTEGER), p.id LIMIT ? OFFSET ?'; args.extend([min(limit, 100), offset])
             return [{'patient_id': 'DB-' + r['id'], 'name': 'Patient ' + r['id']} for r in db.execute(sql, args)]
+
+    def personal_info(self, patient_id, clinic_id):
+        clinic_id = self.clinic(clinic_id)
+        match = re.fullmatch(r'DB-(\d+)', patient_id or '')
+        if not match:
+            raise DataError('Select an imported patient ID.')
+        person_id = match[1]
+        with self.connection() as db:
+            row = db.execute('SELECT p.* FROM people p JOIN clinic_patients c ON p.id=c.person_id WHERE p.id=? AND c.clinic_id=?', (person_id, clinic_id)).fetchone()
+            if not row:
+                raise DataError('Patient not found within the selected clinic.')
+            profile = dict(row)
+            last_visit = db.execute('SELECT MAX(date) FROM appointments WHERE person_id=? AND clinic_id=?', (person_id, clinic_id)).fetchone()[0]
+            allergy = self.catalog(db, 'allergies', profile.get('allergy'))
+            if allergy and allergy.get('clinic_id') in (None, '', '0', clinic_id):
+                allergy_text = allergy.get('name')
+            else:
+                allergy_text = profile.get('allergy')
+        ui_path = Path(os.environ.get('UI_PROFILE_DATABASE', str(self.path.with_name('patient_profiles.sqlite')))).resolve()
+        ui_profile = {}
+        if ui_path.is_file():
+            if os.environ.get('RENDER') == 'true' and not ui_path.is_relative_to(Path(os.environ.get('CSV_STORAGE_DIR', '/var/data')).resolve()):
+                raise DataError('UI_PROFILE_DATABASE must be inside CSV_STORAGE_DIR.')
+            with profile_connection(ui_path) as ui_db:
+                row = ui_db.execute('SELECT * FROM patient_profiles WHERE id=?', (person_id,)).fetchone()
+                if row:
+                    ui_profile = dict(row)
+        display = ui_profile.get('display_name') or ' '.join(str(ui_profile[k]).strip() for k in ['salutation', 'initial', 'name', 'last_name'] if ui_profile.get(k))
+        fields = {
+            'Patient ID': patient_id, 'Clinic ID': clinic_id,
+            'Name': display or None,
+            'Sex (as recorded)': profile.get('sex'),
+            'Recorded age or date value': profile.get('age'),
+            'Age/date format code (uninterpreted)': profile.get('age_type'),
+            'Email': ui_profile.get('email'),
+            'Allergy entry (as recorded)': allergy_text,
+            'Latest appointment in this clinic': last_visit,
+        }
+        return {'patient_id': patient_id, 'clinic_id': clinic_id, 'fields': fields,
+                'profile_details_available': bool(ui_profile),
+                'note': 'Personal information is displayed for the authorized reviewer only and is not added to the LLM context. '
+                        + ('' if ui_profile else 'The optional patient profile file is not installed or has no matching patient. Names/contact fields are unavailable.')}
 
     def catalog(self, db, table, source_id):
         if table not in self.tables or source_id in (None, ''):

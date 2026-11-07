@@ -191,6 +191,22 @@ def patient(id: str = Query(..., pattern=r'^(?:P\d{3}|DB-\d+)$', examples=['P010
         raise HTTPException(404, str(error)) from None
 
 
+@app.get('/api/patient-info', tags=['Patients'])
+def patient_info(id: str = Query(..., pattern=r'^(?:P\d{3}|DB-\d+)$'), clinic_id: str | None = None):
+    store = get_store()
+    if store:
+        return store.personal_info(id, clinic_id)
+    try:
+        selected = select_patient(synthetic_patients(), id)
+    except AppError as error:
+        raise HTTPException(404, str(error)) from None
+    profile = selected['records'][0]
+    return {'patient_id': id, 'clinic_id': selected['clinic_id'],
+            'fields': {'Patient ID': id, 'Clinic ID': selected['clinic_id'], 'Name': selected['name'],
+                       'Age (years)': profile.get('age'), 'Allergy status': profile.get('allergy_status')},
+            'profile_details_available': True, 'note': 'Fictional demonstration patient.'}
+
+
 @app.post('/api/generate', response_model=GenerateResponse, response_model_exclude_unset=True, tags=['Generation'])
 def generate(body: GenerateRequest):
     # A sync endpoint runs in FastAPI's worker thread pool; the blocking API call

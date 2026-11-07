@@ -277,3 +277,48 @@ Clinic status/count and the first patient-page request now load concurrently. St
 Browser requests have bounded timeouts and clearer network/error messages. Render logs include `request_completed`, the method, route path, status and server elapsed milliseconds; they do not include patient IDs from query strings, questions, passwords or record contents. `Server-Timing` is available in the browser Network inspector. Compare that server timing with total browser request duration to investigate network vs server latency.
 
 Spacing changes include a wider patient sidebar, shorter patient IDs in the CSV dropdown, separate clinic and pagination button spacing, a compact title area, aligned header/content widths, responsive question shortcuts and a generation-disabled explanation.
+
+
+## Patient navigation and details (7 November 2026)
+
+When a named account has only one authorized clinic, the application selects and loads that clinic automatically. The clinic field is disabled. Accounts with several authorized clinics retain clinic selection. Access restrictions are enforced by the server.
+
+Previous patient / Next patient move one patient at a time, including across the 50-record page boundary. IDs sort numerically, rather than as text. Gaps are expected when intervening IDs belong to other clinics or do not exist. Exact-ID search remains available; clear the search to browse the clinic again.
+
+**Patient details** opens a popup for the selected patient. It displays available personal fields and marks absent fields as unavailable. Changing patient clears and closes the popup. Original age/date values are shown without guessing their meaning.
+
+Names and email come from a separate private UI profile index. They are not added to the LLM request. The main imported database does not need rebuilding or uploading again.
+
+### Enable personal details on Render
+
+1. Push the updated `api.py`, `csv_store.py`, and all three files in `static/` to GitHub, then deploy the latest commit on Render.
+2. A private profile file has already been built locally at `private_data/patient_profiles.sqlite` (about 20 MB). To rebuild it from the original full export, run:
+
+   ```bash
+   python3 build_patient_profiles.py --source ../slashdr-table-csvs/people.csv
+   ```
+
+3. From your Mac Terminal, upload that file privately:
+
+   ```bash
+   scp -i ~/.ssh/render_slashdr_v2 private_data/patient_profiles.sqlite srv-dbkpen7b9u1s73839lu0@ssh.ohio.render.com:/var/data/patient_profiles.sqlite.uploading
+   ```
+
+4. In Render Shell, check the uploaded SQLite file and install it:
+
+   ```bash
+   python -c "import sqlite3; c=sqlite3.connect('file:/var/data/patient_profiles.sqlite.uploading?mode=ro', uri=True); print(c.execute('PRAGMA quick_check').fetchone()[0]); c.close()"
+   ```
+
+   After it prints `ok`, run:
+
+   ```bash
+   chmod 600 /var/data/patient_profiles.sqlite.uploading
+   mv /var/data/patient_profiles.sqlite.uploading /var/data/patient_profiles.sqlite
+   ```
+
+5. The default profile location is alongside `CSV_DATABASE`. With `/var/data/slashdr.sqlite`, no additional environment variable is needed. Refresh the deployed page, then click **Patient details**. If the profile file is absent, the popup still shows available basic fields and explains that names/contact fields are unavailable.
+
+Keep both databases and the original CSV exports out of GitHub. The source ZIP excludes them and `.env`.
+
+Validation: `node tests/test_navigation.cjs` checks automatic clinic selection, sequential navigation, page boundaries, end-of-list behavior and popup clearing. Python tests check numeric ordering, clinic isolation, missing profile handling and exclusion of UI identity fields from clinical context.

@@ -163,6 +163,40 @@ class CsvIntegrationTests(unittest.TestCase):
         raw = json.dumps({'user': {'password_hash': hash_password('long-test-password'), 'clinic_ids': ['*']}})
         with self.assertRaises(AuthConfigError): parse_accounts(raw)
 
+    def test_numeric_patient_order_across_pages(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'order.sqlite'
+            with contextlib.closing(sqlite3.connect(path)) as db:
+                db.executescript("CREATE TABLE import_metadata(table_name TEXT); CREATE TABLE people(id TEXT); CREATE TABLE clinic_patients(clinic_id TEXT, person_id TEXT);")
+                db.executemany('INSERT INTO people VALUES (?)', [('100',), ('2',), ('10',)])
+                db.executemany('INSERT INTO clinic_patients VALUES (?,?)', [('10', '100'), ('10', '2'), ('10', '10')])
+                db.commit()
+            store = CsvStore(path, ['10'])
+            self.assertEqual([p['patient_id'] for p in store.patients('10', limit=2)], ['DB-2', 'DB-10'])
+            self.assertEqual([p['patient_id'] for p in store.patients('10', limit=2, offset=2)], ['DB-100'])
+
+    def test_personal_info_is_clinic_scoped_and_ui_only(self):
+        from build_patient_profiles import build_profiles, FIELDS
+        with tempfile.TemporaryDirectory() as directory:
+            source, output = Path(directory)/'people.csv', Path(directory)/'profiles.sqlite'
+            with source.open('w', newline='') as f:
+                writer = csv.DictWriter(f, fieldnames=FIELDS); writer.writeheader()
+                writer.writerow({'id': '1', 'name': 'UI_ONLY_TEST_NAME', 'email': 'ui-only@example.test'})
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(build_profiles(source, output), 1)
+            with patch.dict(os.environ, {'UI_PROFILE_DATABASE': str(output), 'RENDER': 'false'}):
+                info = self.store.personal_info('DB-1', '10')
+                self.assertEqual(info['fields']['Name'], 'UI_ONLY_TEST_NAME')
+                self.assertEqual(info['fields']['Email'], 'ui-only@example.test')
+                self.assertEqual(info['fields']['Latest appointment in this clinic'], '2026-09-18')
+                with self.assertRaises(DataError): self.store.personal_info('DB-2', '10')
+                with self.assertRaises(DataError): self.store.personal_info('DB-1', '20')
+                clinical = json.dumps(self.store.patient('DB-1', '10'))
+                self.assertNotIn('UI_ONLY_TEST_NAME', clinical)
+                self.assertNotIn('ui-only@example.test', clinical)
+            with patch.dict(os.environ, {'UI_PROFILE_DATABASE': str(output) + '.missing'}):
+                self.assertIsNone(self.store.personal_info('DB-1', '10')['fields']['Name'])
+
     def test_read_only_database_and_no_overwrite(self):
         with self.store.connection() as db:
             with self.assertRaises(sqlite3.OperationalError):db.execute('DELETE FROM people')
