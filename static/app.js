@@ -274,11 +274,6 @@ $('patient-search').addEventListener('submit', event => {
   if (dataMode === 'csv') return searchCsvPatients(true);
   filterPatients();
 });
-$('search-clear').addEventListener('click', () => {
-  clearTimeout(searchTimer); $('search').value = ''; $('search').focus();
-  if (dataMode === 'csv') return searchCsvPatients(true);
-  filterPatients();
-});
 $('patient').addEventListener('change', loadPatient);
 $('ask').addEventListener('submit', async event => {
   event.preventDefault(); if (!selected || busy || !configured) return;
@@ -352,7 +347,7 @@ async function searchCsvPatients(reset = false, selectLast = false) {
       const empty = document.createElement('option'); empty.value = ''; empty.textContent = 'No patient found in this clinic'; $('patient').append(empty);
     }
     $('search-status').textContent = query
-      ? (patientPage.length ? `Found ${patientPage[0].patient_id} in Clinic ${clinicId}.` : `No patient with ID ${query.toUpperCase().startsWith('P') ? query.toUpperCase() : 'P' + query} is available in Clinic ${clinicId}. IDs can have gaps. Clear the search to browse available patients.`)
+      ? (patientPage.length ? `Found ${patientPage[0].patient_id} in Clinic ${clinicId}.` : `No patient with ID ${query.toUpperCase().startsWith('P') ? query.toUpperCase() : 'P' + query} is available in Clinic ${clinicId}. IDs can have gaps. Empty the search field to browse available patients.`)
       : (patientPage.length ? 'Choose a patient below, or enter an exact ID above.' : 'No patients are available in this clinic.');
     listLoading = false;
     await loadPatient();
@@ -427,9 +422,7 @@ $('patients-next').addEventListener('click', () => navigatePatient(1));
     configured = status.generation_enabled ?? status.configured; generationHelp();
     if (dataMode === 'csv') {
       $('clinic-controls').hidden = false; $('patient-pages').hidden = false;
-      $('search-actions').hidden = false;
       $('search-label').textContent = 'Find by exact patient ID'; $('search').placeholder = 'For example P11 or 11';
-      $('search-help').textContent = 'Exact match within your assigned clinic. Patient IDs are not consecutive.';
       $('data-notice').textContent = 'Imported CSV patient records · Select an authorized Clinic ID · AI answers require clinician review';
       $('records-help').textContent = 'Explore available measurements and visits. Click a value or source link to inspect the original entry. This overview covers retrieved records only.';
       $('status').textContent = 'Enter an authorized Clinic ID, then load its patients.';

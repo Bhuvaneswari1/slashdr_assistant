@@ -353,3 +353,5 @@ Deploy the updated three files in `static/` to Render and refresh the browser. N
 Patient search accepts an exact prefixed or numeric ID (for example P11, p11 or 11). Use Search or Enter; typing also searches after a short pause. Clear restores clinic browsing. No-match and invalid-ID messages appear beside the search field. In the imported Clinic 1 snapshot P12 is not available; P1, P4 and P11 are available. A numeric gap is not a search error, and search does not disclose another clinic's records. Editing the search immediately disables generation for the previous patient until a new match loads.
 
 The patient and question panels now stretch to matching heights on desktop, with consistent control heights and spacing. Empty patient profiles no longer leave a divider or blank profile area. Mobile layouts retain stacked panels. Deploy the three updated static files; no database changes are required.
+
+The patient search now uses a single input without helper text or Search/Clear buttons. Typing searches automatically; Enter searches immediately. Empty the input to restore clinic browsing.

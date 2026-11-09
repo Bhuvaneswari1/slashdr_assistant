@@ -55,8 +55,8 @@ const context=vm.createContext({document:{getElementById:element,querySelectorAl
   await submitSearch();assert.equal(element('patient').value,'');assert.equal(element('patient').disabled,true);
   assert.match(element('search-status').textContent,/No patient with ID P99999 is available in Clinic 13/);
   element('search').value='P-11';await submitSearch();assert.match(element('search-status').textContent,/No spaces or hyphens/);
-  await element('search-clear').handlers.click();assert.equal(element('search').value,'');assert.equal(element('patient').value,'P1');assert.equal(element('patient').disabled,false);
-  console.log('Passed: prefixed/numeric exact search, submit, missing ID, invalid format, stale-patient protection and Clear recovery.');
+  element('search').value='';element('search').handlers.input();await submitSearch();assert.equal(element('search').value,'');assert.equal(element('patient').value,'P1');assert.equal(element('patient').disabled,false);
+  console.log('Passed: prefixed/numeric exact search, submit, missing ID, invalid format, stale-patient protection and empty-search recovery.');
   const visit=(id,date)=>({record_id:`P1-appointments-${id}`,source_table:'appointments',type:'appointments',date,data:{id}});
   const bp=(id,date,answer,appointment_id,unit='mm.Hg')=>({record_id:`P1-vital_answers-${id}`,source_table:'vital_answers',type:'vital_answers',date,data:{answer,appointment_id,lookup_context:{question_id:{name:'BP',unit}}}});
   context.testRecords=[visit('1','2026-01-01'),visit('2','2026-01-02'),visit('3','2026-01-03'),bp('1','2026-01-01','120-80','1'),bp('2','2026-01-03','130/85','3')];
