@@ -346,3 +346,10 @@ The timeline groups linked entries by appointment ID, then by category. Separate
 Answer citations, measurement cards, chart points (mouse or Enter/Space), measurement-table source buttons and timeline sources open an original-record dialog. The bulk raw-record list is no longer shown on the main page. Patient changes clear the overview and close source dialogs.
 
 Deploy the updated three files in `static/` to Render and refresh the browser. No database rebuild, extra dependency, environment change or patient-data upload is needed. Run `node tests/test_navigation.cjs` for chart and navigation regression checks, alongside the Python suite.
+
+
+### Exact patient search and panel alignment
+
+Patient search accepts an exact prefixed or numeric ID (for example P11, p11 or 11). Use Search or Enter; typing also searches after a short pause. Clear restores clinic browsing. No-match and invalid-ID messages appear beside the search field. In the imported Clinic 1 snapshot P12 is not available; P1, P4 and P11 are available. A numeric gap is not a search error, and search does not disclose another clinic's records. Editing the search immediately disables generation for the previous patient until a new match loads.
+
+The patient and question panels now stretch to matching heights on desktop, with consistent control heights and spacing. Empty patient profiles no longer leave a divider or blank profile area. Mobile layouts retain stacked panels. Deploy the three updated static files; no database changes are required.

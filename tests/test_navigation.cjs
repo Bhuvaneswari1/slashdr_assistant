@@ -22,7 +22,7 @@ const context=vm.createContext({document:{getElementById:element,querySelectorAl
     const url=new URL(path,'http://test'); let body;
     if(url.pathname==='/api/clinics') body=[{clinic_id:'13',name:'Clinic 13'}];
     else if(url.pathname==='/api/status') body={data_mode:'csv',generation_enabled:false,patient_count:105};
-    else if(url.pathname==='/api/patients') body=ids.slice(Number(url.searchParams.get('offset')),Number(url.searchParams.get('offset'))+51).map(patient_id=>({patient_id}));
+    else if(url.pathname==='/api/patients') {const search=(url.searchParams.get('search')||'').trim().replace(/^p/i,''); const matching=search?ids.filter(id=>id.slice(1)===search):ids;body=matching.slice(Number(url.searchParams.get('offset')),Number(url.searchParams.get('offset'))+51).map(patient_id=>({patient_id}));}
     else if(url.pathname==='/api/patient') body={patient_id:url.searchParams.get('id'),clinic_id:'13',name:'Fictional patient',records:[{record_id:'fixture',type:'profile',date:'2026-09-01'}]};
     else if(url.pathname==='/api/patient-info') body={patient_id:url.searchParams.get('id'),fields:{Name:'Fictional popup name'},note:'Test only'};
     else throw Error(path);
@@ -46,6 +46,17 @@ const context=vm.createContext({document:{getElementById:element,querySelectorAl
   assert.equal(element('patient-info-fields').children.length,0);
   for(let i=0;i<54;i++) await element('patients-next').handlers.click();
   assert.equal(element('patient').value,'P105'); assert.equal(element('patients-next').disabled,true);
+  const submitSearch=()=>element('patient-search').handlers.submit({preventDefault(){}});
+  element('search').value='p11';await submitSearch();
+  assert.equal(element('patient').value,'P11');assert.match(element('search-status').textContent,/Found P11/);
+  element('search').value='11';await submitSearch();assert.equal(element('patient').value,'P11');
+  element('search').value='P99999';element('search').handlers.input();
+  assert.equal(element('generate').disabled,true,'Typing must immediately disable stale-patient generation');
+  await submitSearch();assert.equal(element('patient').value,'');assert.equal(element('patient').disabled,true);
+  assert.match(element('search-status').textContent,/No patient with ID P99999 is available in Clinic 13/);
+  element('search').value='P-11';await submitSearch();assert.match(element('search-status').textContent,/No spaces or hyphens/);
+  await element('search-clear').handlers.click();assert.equal(element('search').value,'');assert.equal(element('patient').value,'P1');assert.equal(element('patient').disabled,false);
+  console.log('Passed: prefixed/numeric exact search, submit, missing ID, invalid format, stale-patient protection and Clear recovery.');
   const visit=(id,date)=>({record_id:`P1-appointments-${id}`,source_table:'appointments',type:'appointments',date,data:{id}});
   const bp=(id,date,answer,appointment_id,unit='mm.Hg')=>({record_id:`P1-vital_answers-${id}`,source_table:'vital_answers',type:'vital_answers',date,data:{answer,appointment_id,lookup_context:{question_id:{name:'BP',unit}}}});
   context.testRecords=[visit('1','2026-01-01'),visit('2','2026-01-02'),visit('3','2026-01-03'),bp('1','2026-01-01','120-80','1'),bp('2','2026-01-03','130/85','3')];

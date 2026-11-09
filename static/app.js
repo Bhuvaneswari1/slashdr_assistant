@@ -226,7 +226,13 @@ $('source-dialog').addEventListener('click',event=>{
 function filterPatients() {
   if (dataMode === 'csv') {
     clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => searchCsvPatients(true), 250);
+    ++searchVersion; ++selectionVersion; selected = null; lastResult = null;
+    patientLoading = false; listLoading = false;
+    clearPatientDetails(); clearOverview(); $('profile').replaceChildren(); $('count').textContent = ''; $('context-scope').textContent = '';
+    $('result').hidden = true; $('generate').disabled = true; $('patient-info').disabled = true;
+    $('patient').disabled = true; generationHelp(); updateNavigation();
+    $('search-status').textContent = 'Searching the selected clinic…';
+    searchTimer = setTimeout(() => searchCsvPatients(true), 400);
     return;
   }
   const query = $('search').value.toLowerCase();
@@ -244,7 +250,7 @@ async function loadPatient() {
   $('patient-info').disabled = true;
   selected = null; lastResult = null; $('context-scope').textContent = ''; $('result').hidden = true; clearOverview(); $('profile').replaceChildren(); $('count').textContent = ''; message('Loading patient records…'); $('generate').disabled = true; generationHelp();
   updateNavigation();
-  if (!$('patient').value) { patientLoading = false; message('No matching patients. Try another search.'); updateNavigation(); return; }
+  if (!$('patient').value) { patientLoading = false; message(dataMode === 'csv' ? 'Select an available patient in this clinic to continue.' : 'No matching patients. Try another search.'); updateNavigation(); return; }
   try {
     const patient = await api(`/api/patient?id=${encodeURIComponent($('patient').value)}${dataMode === 'csv' ? `&clinic_id=${encodeURIComponent(clinicId)}` : ''}`);
     if (version !== selectionVersion) return;
@@ -263,6 +269,16 @@ async function loadPatient() {
 }
 document.querySelectorAll('[data-question]').forEach(button => button.addEventListener('click', () => { $('question').value = button.dataset.question; $('question').focus(); }));
 $('search').addEventListener('input', filterPatients);
+$('patient-search').addEventListener('submit', event => {
+  event.preventDefault(); clearTimeout(searchTimer);
+  if (dataMode === 'csv') return searchCsvPatients(true);
+  filterPatients();
+});
+$('search-clear').addEventListener('click', () => {
+  clearTimeout(searchTimer); $('search').value = ''; $('search').focus();
+  if (dataMode === 'csv') return searchCsvPatients(true);
+  filterPatients();
+});
 $('patient').addEventListener('change', loadPatient);
 $('ask').addEventListener('submit', async event => {
   event.preventDefault(); if (!selected || busy || !configured) return;
@@ -313,7 +329,14 @@ async function searchCsvPatients(reset = false, selectLast = false) {
   clearPatientDetails(); $('patient-info').disabled = true;
   $('result').hidden = true; $('generate').disabled = true;
   $('profile').replaceChildren(); clearOverview(); $('context-scope').textContent = ''; $('count').textContent = '';
-  if (!clinicId) {listLoading = false; updateNavigation(); return;}
+  if (!clinicId) {listLoading = false; $('search-status').textContent = 'Select a clinic before searching.'; updateNavigation(); return;}
+  const query = $('search').value.trim();
+  if (query && !/^(?:P)?\d+$/i.test(query)) {
+    $('patient').replaceChildren(); $('patient').disabled = true; listLoading = false;
+    $('search-status').textContent = 'Enter P followed by digits (for example P11), or the numeric ID alone. No spaces or hyphens.';
+    message('Enter a valid patient ID to continue.', true); updateNavigation(); return;
+  }
+  $('search-status').textContent = 'Searching the selected clinic…';
   message('Loading patients for the selected clinic…'); updateNavigation();
   try {
     const list = await api(`/api/patients?clinic_id=${encodeURIComponent(clinicId)}&search=${encodeURIComponent($('search').value)}&offset=${pageOffset}&limit=51`);
@@ -323,10 +346,17 @@ async function searchCsvPatients(reset = false, selectLast = false) {
     for (const p of patientPage) {
       const option = document.createElement('option'); option.value = p.patient_id; option.textContent = p.patient_id; $('patient').append(option);
     }
+    $('patient').disabled = !patientPage.length;
     if (patientPage.length) $('patient').selectedIndex = selectLast ? patientPage.length - 1 : 0;
+    else {
+      const empty = document.createElement('option'); empty.value = ''; empty.textContent = 'No patient found in this clinic'; $('patient').append(empty);
+    }
+    $('search-status').textContent = query
+      ? (patientPage.length ? `Found ${patientPage[0].patient_id} in Clinic ${clinicId}.` : `No patient with ID ${query.toUpperCase().startsWith('P') ? query.toUpperCase() : 'P' + query} is available in Clinic ${clinicId}. IDs can have gaps. Clear the search to browse available patients.`)
+      : (patientPage.length ? 'Choose a patient below, or enter an exact ID above.' : 'No patients are available in this clinic.');
     listLoading = false;
     await loadPatient();
-  } catch (error) { if (version === searchVersion) message(error.message, true); }
+  } catch (error) { if (version === searchVersion) {message(error.message, true); $('search-status').textContent = 'Patient search failed. Please retry.';} }
   finally {if (version === searchVersion) {listLoading = false; updateNavigation();}}
 }
 async function navigatePatient(direction) {
@@ -363,7 +393,7 @@ $('patient-dialog').addEventListener('click', event => {
   if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) $('patient-dialog').close();
 });
 $('clinic-id').addEventListener('input', () => {
-  clinicId = ''; ++searchVersion; ++selectionVersion; selected = null; lastResult = null;
+  clinicId = ''; clearTimeout(searchTimer); $('search-status').textContent = ''; ++searchVersion; ++selectionVersion; selected = null; lastResult = null;
   clearPatientDetails(); $('patient-info').disabled = true; patientPage = []; updateNavigation();
   $('result').hidden = true; $('generate').disabled = true; generationHelp(); $('patient').replaceChildren();
   $('profile').replaceChildren(); clearOverview(); $('context-scope').textContent = ''; $('count').textContent = '';
@@ -397,7 +427,9 @@ $('patients-next').addEventListener('click', () => navigatePatient(1));
     configured = status.generation_enabled ?? status.configured; generationHelp();
     if (dataMode === 'csv') {
       $('clinic-controls').hidden = false; $('patient-pages').hidden = false;
-      $('search-label').textContent = 'Find by exact patient ID'; $('search').placeholder = 'For example P123 or 123';
+      $('search-actions').hidden = false;
+      $('search-label').textContent = 'Find by exact patient ID'; $('search').placeholder = 'For example P11 or 11';
+      $('search-help').textContent = 'Exact match within your assigned clinic. Patient IDs are not consecutive.';
       $('data-notice').textContent = 'Imported CSV patient records · Select an authorized Clinic ID · AI answers require clinician review';
       $('records-help').textContent = 'Explore available measurements and visits. Click a value or source link to inspect the original entry. This overview covers retrieved records only.';
       $('status').textContent = 'Enter an authorized Clinic ID, then load its patients.';
