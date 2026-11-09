@@ -324,3 +324,25 @@ Keep both databases and the original CSV exports out of GitHub. The source ZIP e
 Validation: `node tests/test_navigation.cjs` checks automatic clinic selection, sequential navigation, page boundaries, end-of-list behavior and popup clearing. Python tests check numeric ordering, clinic isolation, missing profile handling and exclusion of UI identity fields from clinical context.
 
 Imported patient IDs display as `P` followed by the original numeric `people.id` (for example `P22791`). Exact search accepts either `P22791` or `22791`. The stored database ID remains unchanged; no reimport is needed.
+
+
+## Active reviewer scope: Clinic 1 (9 November 2026)
+
+The private `client-review` account configuration now authorizes only Clinic 1. Local `CSV_ALLOWED_CLINICS` is also set to `1`. The existing imported SQLite database already contains Clinic 1 (10,069 patients in the imported snapshot); no reimport or database upload is needed. Example patients are P1, P4, P11, P31 and P36. Existing patient profile lookup works with the same numeric source IDs.
+
+To apply this to the hosted app, open Render → slashdr_assistant → Environment → Edit. In the existing `REVIEW_ACCOUNTS_JSON` value, change only the `client-review` account's `clinic_ids` from `["13"]` to `["1"]`. Preserve its existing password hash and any other named accounts. Save and deploy/restart. If `CSV_ALLOWED_CLINICS` is present on Render, set it to `1` as well; named-account clinic scopes control authenticated cloud access. Keep `DATA_MODE=csv` and the existing database path and external-generation setting.
+
+Refresh the app after deployment. Clinic 1 will be selected automatically, and patient lists, record retrieval, personal details and generation requests will use that clinic. Do not commit the private account JSON or `.env` to GitHub. Clinic 1's name has not been verified; do not label it Saravanan's clinic based on the earlier Clinic 13 configuration.
+
+
+## Patient trends & visit history (9 November 2026)
+
+The former flat evidence list is replaced with latest dated measurement cards, a selectable BP/heart-rate/SpO₂/weight chart and a visit timeline. These are rendered directly from retrieved records without an additional LLM request. Chart dates retain the source date or the backend's stated appointment-date fallback; the source popup exposes the date basis.
+
+A single recorded date shows points and a trend-unavailable explanation. Multiple readings on one date are retained, not averaged. Missing measurements at retrieved appointments break connecting lines. Nonnumeric values, unknown dates and unsupported units remain in the measurement table but are not plotted. Different measurements have separate charts and units. The overview is limited to the records retrieved by the existing API caps; it is not a complete lifetime chart.
+
+The timeline groups linked entries by appointment ID, then by category. Separate appointments on the same day remain distinct. Unlinked records are explicitly labeled as date groups. Missing information is not treated as normal. Latest cards show all readings on the latest available date instead of choosing an arbitrary same-day reading.
+
+Answer citations, measurement cards, chart points (mouse or Enter/Space), measurement-table source buttons and timeline sources open an original-record dialog. The bulk raw-record list is no longer shown on the main page. Patient changes clear the overview and close source dialogs.
+
+Deploy the updated three files in `static/` to Render and refresh the browser. No database rebuild, extra dependency, environment change or patient-data upload is needed. Run `node tests/test_navigation.cjs` for chart and navigation regression checks, alongside the Python suite.
